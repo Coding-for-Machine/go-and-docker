@@ -1,5 +1,6 @@
 # Golang container
-FROM golang:1.21-alpine
+FROM golang:latest
+
 
 WORKDIR /app
 
