@@ -6,19 +6,19 @@ services:
     container_name: app
     ports:
       - 3000:3000
-    depends_on:
-      - db
-    env_file:
-      - .env 
-  db:
-    image: postgres:16
-    container_name: app_db
-    restart: always
-    ports:
-      - 5432:5432
-    environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-      POSTGRES_DB: mydb
-volumes:
-  db-data:
+#     depends_on:
+#       - db
+#     env_file:
+#       - .env 
+#   db:
+#     image: postgres:16
+#     container_name: app_db
+#     restart: always
+#     ports:
+#       - 5432:5432
+#     environment:
+#       POSTGRES_USER: myuser
+#       POSTGRES_PASSWORD: mypassword
+#       POSTGRES_DB: mydb
+# volumes:
+#   db-data:
