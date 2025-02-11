@@ -1,5 +1,5 @@
 # Golang container
-FROM golang:latest
+FROM golang:1.23
 
 
 WORKDIR /app
