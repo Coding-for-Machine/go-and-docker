@@ -17,9 +17,9 @@ import (
 // 📌 TestCase tuzilmasi
 type TestCase struct {
 	TestCase       int    `json:"test_case"`
-	Input          []int  `json:"input"`
-	ExpectedOutput int    `json:"expected_output"`
-	ActualOutput   int    `json:"actual_output,omitempty"`
+	Input          string `json:"input"` // 🚨 String bo'lishi kerak
+	ExpectedOutput string `json:"expected_output"`
+	ActualOutput   string `json:"actual_output,omitempty"`
 	Passed         bool   `json:"passed,omitempty"`
 	Language       string `json:"language"`
 }
@@ -30,7 +30,7 @@ var languageCommands = map[string]string{
 	"go":     "go run /app/solution.go",
 }
 
-// 📌 Tar formatida fayl yaratish
+// 📌 Faylni tar formatiga o‘tkazish
 func createTarFile(fileName, content string) (*bytes.Buffer, error) {
 	buffer := new(bytes.Buffer)
 	tarWriter := tar.NewWriter(buffer)
@@ -66,60 +66,53 @@ func fileConnect(cli *client.Client, containerName, filePath, containerPath, fil
 	return nil
 }
 
-// 📌 Docker konteynerida kodni ishga tushirish
-func codeRunIn(cli *client.Client, containerName, command, input string) (string, string, error) {
+// 📌 Konteyner ichida kodni ishga tushirish va natijani olish
+func executeCode(cli *client.Client, containerName, command, input string) (string, error) {
 	execConfig := types.ExecConfig{
 		AttachStdout: true,
 		AttachStderr: true,
 		AttachStdin:  true,
-		Cmd:          []string{"sh", "-c", command},
 		Tty:          false,
+		Cmd:          []string{"sh", "-c", fmt.Sprintf("echo '%s' | %s", input, command)},
 	}
 
 	execIDResp, err := cli.ContainerExecCreate(context.Background(), containerName, execConfig)
 	if err != nil {
-		return "", "", fmt.Errorf("Exec yaratishda xatolik: %v", err)
+		return "", fmt.Errorf("Exec yaratishda xatolik: %v", err)
 	}
 
 	resp, err := cli.ContainerExecAttach(context.Background(), execIDResp.ID, types.ExecStartCheck{})
 	if err != nil {
-		return "", "", fmt.Errorf("Exec boshlashda xatolik: %v", err)
+		return "", fmt.Errorf("Exec attach qilishda xatolik: %v", err)
 	}
 	defer resp.Close()
 
-	if _, err := resp.Conn.Write([]byte(input + "\n")); err != nil {
-		return "", "", fmt.Errorf("Input uzatishda xatolik: %v", err)
+	var outputBuffer bytes.Buffer
+	_, err = io.Copy(&outputBuffer, resp.Reader)
+	if err != nil {
+		return "", fmt.Errorf("Natijani o'qishda xatolik: %v", err)
 	}
 
-	var output, errorOutput strings.Builder
-	io.Copy(&output, resp.Reader)
-
-	return strings.TrimSpace(output.String()), strings.TrimSpace(errorOutput.String()), nil
+	return strings.TrimSpace(outputBuffer.String()), nil
 }
 
 func main() {
 	app := fiber.New()
-	// cli, err := client.NewClientWithOpts(client.WithHost("tcp://localhost:2375"), client.WithAPIVersionNegotiation())
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		log.Fatalf("Docker client yaratishda xatolik: %v", err)
 	}
 	defer cli.Close()
 
-	containerName := "python-app"
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Hello")
-	})
-	// 📌 Testlarni bajarish API
 	app.Post("/run-test", func(c *fiber.Ctx) error {
 		var testCase TestCase
 		if err := c.BodyParser(&testCase); err != nil {
+			fmt.Println("JSON Parsing Error:", err)
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid JSON format"})
 		}
 
-		// 🔹 Tildan kelib chiqib fayl yaratish
-		fileContent := ""
-		filePath := ""
+		// 🔹 Fayl yaratish
+		var fileContent, filePath string
 		if testCase.Language == "python" {
 			filePath = "solution.py"
 			fileContent = `import sys
@@ -138,39 +131,32 @@ func main() {
 	fmt.Println(a + b)
 }`
 		} else {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Supported languages: python, go"})
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Unsupported language"})
 		}
 
-		// 📌 Faylni konteynerga yuklash
+		containerName := fmt.Sprintf("%s-app", testCase.Language)
+		command, exists := languageCommands[testCase.Language]
+		if !exists {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Unsupported language"})
+		}
+
+		// 🔹 Faylni konteynerga yuklash
 		if err := fileConnect(cli, containerName, filePath, "/app/", fileContent); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 		}
 
-		// 📌 Dockerda kodni ishga tushirish
-		command := languageCommands[testCase.Language]
-		input := fmt.Sprintf("%d,%d", testCase.Input[0], testCase.Input[1])
-		output, errorOutput, err := codeRunIn(cli, containerName, command, input)
+		// 🔹 Kodni ishga tushirish va natijani olish
+		actualOutput, err := executeCode(cli, containerName, command, testCase.Input)
 		if err != nil {
-			testCase.Passed = false
-			testCase.ActualOutput = 0
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 		}
-		fmt.Println(errorOutput)
 
-		// 📌 Natijani formatlash
-		var actualOutput int
-		fmt.Sscanf(output, "%d", &actualOutput)
+		// 📌 Natijani JSON formatda qaytarish
 		testCase.ActualOutput = actualOutput
-		testCase.Passed = (actualOutput == testCase.ExpectedOutput)
+		testCase.Passed = (testCase.ActualOutput == testCase.ExpectedOutput)
 
-		// 📌 Chiroyli JSON formatda qaytarish
 		return c.JSON(testCase)
 	})
 
-	// 🌍 Serverni ishga tushirish
-	port := 3000
-	fmt.Printf("🚀 Server http://localhost:%d da ishlayapti...\n", port)
-	log.Fatal(app.Listen(fmt.Sprintf(":%d", port)))
-	log.Fatal(app.Listen("0.0.0.0:3000"))
-
+	log.Fatal(app.Listen(":3000"))
 }
