@@ -99,8 +99,8 @@ func codeRunIn(cli *client.Client, containerName, command, input string) (string
 
 func main() {
 	app := fiber.New()
-	cli, err := client.NewClientWithOpts(client.WithHost("tcp://localhost:2375"), client.WithAPIVersionNegotiation())
-	// cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	// cli, err := client.NewClientWithOpts(client.WithHost("tcp://localhost:2375"), client.WithAPIVersionNegotiation())
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		log.Fatalf("Docker client yaratishda xatolik: %v", err)
 	}
