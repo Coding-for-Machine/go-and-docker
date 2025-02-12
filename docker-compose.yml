@@ -6,16 +6,20 @@ services:
       - "3000:3000"
     networks:
       - app_network
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"  # 🔥 Docker API ulanishi uchun 🔥
 
   python-app:
-    build: 
+    build:
       context: ./language/python
     container_name: python-app
     ports:
       - "8000:8000"
     networks:
       - app_network
-    restart: always  # Agar nosozlik bo‘lsa, qayta ishga tushadi
+    restart: always
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"  # 🔥 Docker API ulanishi uchun 🔥
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
       interval: 30s
