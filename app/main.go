@@ -99,15 +99,17 @@ func codeRunIn(cli *client.Client, containerName, command, input string) (string
 
 func main() {
 	app := fiber.New()
-
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := client.NewClientWithOpts(client.WithHost("tcp://localhost:2375"), client.WithAPIVersionNegotiation())
+	// cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		log.Fatalf("Docker client yaratishda xatolik: %v", err)
 	}
 	defer cli.Close()
 
-	containerName := "code-runner"
-
+	containerName := "python-app"
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("Hello")
+	})
 	// 📌 Testlarni bajarish API
 	app.Post("/run-test", func(c *fiber.Ctx) error {
 		var testCase TestCase
@@ -169,4 +171,6 @@ func main() {
 	port := 3000
 	fmt.Printf("🚀 Server http://localhost:%d da ishlayapti...\n", port)
 	log.Fatal(app.Listen(fmt.Sprintf(":%d", port)))
+	log.Fatal(app.Listen("0.0.0.0:3000"))
+
 }
