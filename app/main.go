@@ -14,23 +14,20 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// 📌 TestCase tuzilmasi
 type TestCase struct {
 	TestCase       int    `json:"test_case"`
-	Input          string `json:"input"` // 🚨 String bo'lishi kerak
+	Input          string `json:"input"`
 	ExpectedOutput string `json:"expected_output"`
 	ActualOutput   string `json:"actual_output,omitempty"`
 	Passed         bool   `json:"passed,omitempty"`
 	Language       string `json:"language"`
 }
 
-// 🔹 Qo'llab-quvvatlanadigan tillar va ularning run buyruqlari
 var languageCommands = map[string]string{
 	"python": "python3 /app/solution.py",
 	"go":     "go run /app/solution.go",
 }
 
-// 📌 Faylni tar formatiga o‘tkazish
 func createTarFile(fileName, content string) (*bytes.Buffer, error) {
 	buffer := new(bytes.Buffer)
 	tarWriter := tar.NewWriter(buffer)
@@ -51,7 +48,6 @@ func createTarFile(fileName, content string) (*bytes.Buffer, error) {
 	return buffer, nil
 }
 
-// 📌 Faylni konteynerga joylash
 func fileConnect(cli *client.Client, containerName, filePath, containerPath, fileContent string) error {
 	tarBuffer, err := createTarFile(filePath, fileContent)
 	if err != nil {
@@ -61,19 +57,16 @@ func fileConnect(cli *client.Client, containerName, filePath, containerPath, fil
 	if err := cli.CopyToContainer(context.Background(), containerName, containerPath, tarBuffer, types.CopyToContainerOptions{}); err != nil {
 		return fmt.Errorf("Faylni konteynerga uzatishda xatolik: %v", err)
 	}
-
-	fmt.Printf("Fayl '%s' konteynerning '%s' yo'liga uzatildi.\n", filePath, containerPath)
 	return nil
 }
 
-// 📌 Konteyner ichida kodni ishga tushirish va natijani olish
 func executeCode(cli *client.Client, containerName, command, input string) (string, error) {
 	execConfig := types.ExecConfig{
 		AttachStdout: true,
 		AttachStderr: true,
 		AttachStdin:  true,
 		Tty:          false,
-		Cmd:          []string{"sh", "-c", fmt.Sprintf("echo '%s' | %s", input, command)},
+		Cmd:          []string{"sh", "-c", fmt.Sprintf("echo -n '%s' | %s", input, command)},
 	}
 
 	execIDResp, err := cli.ContainerExecCreate(context.Background(), containerName, execConfig)
@@ -88,8 +81,7 @@ func executeCode(cli *client.Client, containerName, command, input string) (stri
 	defer resp.Close()
 
 	var outputBuffer bytes.Buffer
-	_, err = io.Copy(&outputBuffer, resp.Reader)
-	if err != nil {
+	if _, err := io.Copy(&outputBuffer, resp.Reader); err != nil {
 		return "", fmt.Errorf("Natijani o'qishda xatolik: %v", err)
 	}
 
@@ -107,11 +99,9 @@ func main() {
 	app.Post("/run-test", func(c *fiber.Ctx) error {
 		var testCase TestCase
 		if err := c.BodyParser(&testCase); err != nil {
-			fmt.Println("JSON Parsing Error:", err)
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid JSON format"})
 		}
 
-		// 🔹 Fayl yaratish
 		var fileContent, filePath string
 		if testCase.Language == "python" {
 			filePath = "solution.py"
@@ -140,18 +130,15 @@ func main() {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Unsupported language"})
 		}
 
-		// 🔹 Faylni konteynerga yuklash
 		if err := fileConnect(cli, containerName, filePath, "/app/", fileContent); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 		}
 
-		// 🔹 Kodni ishga tushirish va natijani olish
 		actualOutput, err := executeCode(cli, containerName, command, testCase.Input)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 		}
 
-		// 📌 Natijani JSON formatda qaytarish
 		testCase.ActualOutput = actualOutput
 		testCase.Passed = (testCase.ActualOutput == testCase.ExpectedOutput)
 
