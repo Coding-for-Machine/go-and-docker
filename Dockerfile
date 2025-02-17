@@ -10,7 +10,7 @@ RUN go mod download
 
 COPY . ./
 
-RUN go build -o main ./app/main.go
+RUN go build -o main ./app/main2.go
 
 EXPOSE 3000
 
