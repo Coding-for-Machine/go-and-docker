@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
